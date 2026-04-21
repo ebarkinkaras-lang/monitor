@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TürkiyeMonitor v1.5</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ── CRT Overlay (scanlines + vignette) ──────────────────── -->
+<div id="crt-overlay"></div>
+
+<!-- ── Screen Wrap (barrel curvature) ──────────────────────── -->
+<div id="screen-wrap">
+
+<!-- ── Boot Screen ─────────────────────────────────────────── -->
+<div id="boot-screen">
+  <pre class="boot-ascii" id="boot-ascii"></pre>
+  <div id="boot-log"></div>
+</div>
+
+<!-- ── Main Application ────────────────────────────────────── -->
+<div id="app-root" style="display:none;">
+
+  <!-- Custom Frameless Title Bar -->
+  <div id="custom-titlebar">
+    <div class="title-left">
+      <span class="sys-icon">▣</span>
+      <span>TÜRKİYE MONITOR v1.5</span>
+    </div>
+    <span class="clock" id="titlebar-clock"></span>
+    <div class="title-right">
+      <button onclick="window.electronAPI?.minimize()" title="Küçült">─</button>
+      <button onclick="window.electronAPI?.maximize()" title="Büyüt/Küçült">□</button>
+      <button class="btn-close" onclick="window.electronAPI?.close()" title="Kapat">✕</button>
+    </div>
+  </div>
+
+  <!-- System Info Header (Neofetch style) -->
+  <div id="sys-header" style="display: flex; align-items: center; justify-content: space-between;">
+    <div style="display: flex; align-items: center; gap: 15px;">
+      <pre class="ascii-logo" id="sys-ascii-logo"></pre>
+      <div class="sys-info" id="sys-info-fields"></div>
+      <div class="color-blocks" id="sys-color-blocks"></div>
+    </div>
+    <div id="sys-cli" style="display: flex; align-items: center; background: #000; border: 1px solid var(--amber-dim); padding: 5px 10px; border-radius: 3px; font-family: monospace;">
+      <span style="color: var(--amber); margin-right: 8px;">&gt;_</span>
+      <input type="text" id="terminal-cli-input" placeholder="/TICKER (BIST 100)" style="background: transparent; border: none; color: #00E676; outline: none; font-family: monospace; font-size: 14px; width: 140px;" autocomplete="off" spellcheck="false" />
+    </div>
+  </div>
+
+  <!-- Dashboard Grid -->
+  <div id="dashboard">
+
+    <!-- LEFT: Turkey Political Map -->
+    <div class="panel" id="panel-map">
+      <div class="panel-header">
+        <span><span class="icon">◆</span> TÜRKİYE HARİTASI</span>
+        <div class="news-filters" id="map-filters">
+          <button class="active" data-layer="bist50">BIST 50 TESİSLERİ</button>
+          <button class="active" data-layer="gcc" style="color:var(--green); border-color:var(--border);">ULUSAL YATIRIMLAR</button>
+        </div>
+      </div>
+      <div class="panel-body" id="map-body" style="padding:0; position:relative;">
+        <div id="turkey-map-container"></div>
+        <div id="map-tooltip"></div>
+        <div id="province-info"></div>
+      </div>
+    </div>
+
+    <!-- LEFT BOTTOM: BIST 50 Prices -->
+    <div class="panel" id="panel-bist">
+      <div class="panel-header">
+        <span><span class="icon">◆</span> BIST 50</span>
+        <span class="status" id="bist-status">VERİ BEKLENİYOR</span>
+      </div>
+      <div class="panel-body" id="bist-body">
+        <div class="loading">VERİ BEKLENİYOR...</div>
+      </div>
+    </div>
+
+    <!-- RIGHT TOP: News Headlines & Debt Clock -->
+    <div class="news-debt-wrapper">
+      <div class="panel" id="panel-news">
+        <div class="panel-header">
+          <span><span class="icon">◆</span> MANŞETLER</span>
+          <div class="news-filters">
+            <button class="active" data-hours="6">6 SAAT</button>
+            <button data-hours="48">48 SAAT</button>
+            <button data-hours="120">5 GÜN</button>
+          </div>
+        </div>
+        <div class="panel-body" id="news-body">
+          <div class="loading">RSS VERİSİ ÇEKILIYOR...</div>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-debt">
+        <div class="panel-header" style="justify-content:center; color:#FF1744; border-bottom-color: rgba(255,23,68,0.5);">
+          <span style="color:#FF1744"><span class="icon">⚠</span> NATIONAL DEBT CLOCK (USD)</span>
+        </div>
+        <div class="panel-body" id="debt-body" style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
+          <div id="debt-counter" style="font-size:2vw; font-weight:bold; color:#FF1744; text-shadow: 0 0 10px #FF1744; font-family: monospace; letter-spacing: 2px;">$480,000,000,000</div>
+          <div style="font-size:11px; color:var(--amber-dim); margin-top:5px; text-align:center;">TÜRKİYE BRÜT DIŞ BORÇ STOKU (TCMB BEKLENTİ)</div>
+          <div id="debt-chart-container" style="width:100%; height:90px; margin-top:15px; display:flex; align-items:center; justify-content:center; position:relative;">
+            <!-- Rendered via JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT BOTTOM: Split into sub-panels -->
+    <div class="panel" id="panel-intel">
+      <div class="sub-panels">
+        <!-- Intel Feed -->
+        <div class="sub-panel" id="sub-intel">
+          <div class="panel-header">
+            <span><span class="icon">◆</span> İSTİHBARAT AKIŞI</span>
+            <span class="status" id="intel-status">14 ADET | AKTİF</span>
+          </div>
+          <div class="panel-body" id="intel-body">
+            <div class="loading">İSTİHBARAT VERİSİ ÇEKİLİYOR...</div>
+          </div>
+        </div>
+
+        <!-- BIST News -->
+        <div class="sub-panel" id="sub-bistnews">
+          <div class="panel-header">
+            <span><span class="icon">◆</span> BIST 50 HABERLERİ</span>
+            <span class="status" id="bistnews-status">10 HABER | AKTİF</span>
+          </div>
+          <div class="panel-body" id="bistnews-body">
+            <div class="loading">HABER VERİSİ ÇEKİLİYOR...</div>
+          </div>
+        </div>
+
+        <!-- Risk Tension Index -->
+        <div class="sub-panel" id="sub-risk">
+          <div class="panel-header">
+            <span><span class="icon">◆</span> BIST RISK TENSION INDEX</span>
+            <span class="status" id="risk-status">DEMO</span>
+          </div>
+          <div class="panel-body" id="risk-body">
+            <div class="loading">İNDEKS HESAPLANIYOR...</div>
+          </div>
+        </div>
+
+        <!-- Economic Calendar -->
+        <div class="sub-panel" id="sub-calendar">
+          <div class="panel-header" style="color: #00E676; border-bottom-color: rgba(0, 230, 118, 0.4);">
+            <span><span class="icon">◆</span> EKONOMİK TAKVİM</span>
+            <span class="status" id="calendar-status">AKTİF</span>
+          </div>
+          <div class="panel-body" id="calendar-body">
+            <div class="loading">TAKVİM YÜKLENİYOR...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div><!-- /screen-wrap -->
+
+<!-- ── Province Detail Modal ───────────────────────────────── -->
+<div id="province-modal-overlay">
+  <div id="province-modal">
+    <div class="modal-header">
+      <span id="province-modal-title">İL ADI</span>
+      <button class="modal-close" id="province-modal-close">✕</button>
+    </div>
+    <div class="modal-body" id="province-modal-body"></div>
+  </div>
+</div>
+
+<!-- ── TradingView Chart Modal ───────────────────────────────── -->
+<div id="chart-modal-overlay">
+  <div id="chart-modal">
+    <div class="modal-header">
+      <div style="display:flex; align-items:center; gap: 10px;">
+        <span id="chart-modal-title" style="color:var(--amber); font-weight:bold;">TICKER</span>
+        <span id="chart-modal-subtitle" style="color:var(--amber-dim); font-size:14px;">HİSSE ADI</span>
+      </div>
+      <button class="modal-close" id="chart-modal-close">✕</button>
+    </div>
+    <div class="modal-body" id="chart-modal-body">
+      
+      <!-- L E F T   P A N E L (Graph + Takas) -->
+      <div id="chart-modal-left">
+        <!-- 1. Graph Container -->
+        <div class="panel retro-chart-box">
+          <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+            <span>FİYAT & HACİM (AMBER)</span>
+            <div id="chart-interval-toggles" style="display:flex; gap:8px;">
+              <button class="interval-btn active" data-interval="1d">GÜNLÜK</button>
+              <button class="interval-btn" data-interval="1wk">HAFTALIK</button>
+            </div>
+          </div>
+          <div id="tv-chart-container" style="flex: 1; min-height: 400px; position:relative; overflow:hidden;"></div>
+        </div>
+
+        <!-- 2. Supply Chain Container -->
+        <div class="panel retro-supply-box">
+          <div class="panel-header">TEDARİK & LOJİSTİK AĞI</div>
+          <div id="sc-map-container" style="flex: 1; position: relative; overflow: hidden; background: transparent; display:flex; align-items:center; justify-content:center; padding:10px;">
+             <div id="sc-alert-text" style="position:absolute; top:2px; right:6px; font-size:11px; z-index:10; color:var(--amber-dim);">AĞ DURUMU: NORMAL</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- R I G H T   P A N E L (Indicators + News) -->
+      <div id="chart-modal-right">
+        
+        <div class="tv-indicators-split">
+          <!-- 3. MC-Predict -->
+          <div class="panel retro-info-box">
+            <div class="panel-header">MC-PREDICT v1.0</div>
+            <div id="tv-info-content" class="table-content-area"></div>
+          </div>
+
+          <!-- 4. MACD DEMA Pro -->
+          <div class="panel retro-info-box">
+            <div class="panel-header">MACD DEMA PRO</div>
+            <div id="tv-dema-content" class="table-content-area"></div>
+          </div>
+        </div>
+
+        <!-- 5. Stock Specific News -->
+        <div class="panel retro-news-box" style="flex: 1;">
+          <div class="panel-header">HİSSE HABER ve KAP BİLDİRİMLERİ</div>
+          <div id="stock-news-list" class="news-list-area"></div>
+        </div>
+
+        <!-- 6. Contracts / Tenders -->
+        <div class="panel retro-contracts-box" style="flex: 1; margin-top: 10px; display: flex; flex-direction: column; overflow: hidden;">
+          <div class="panel-header" style="color: #44FF44; border-bottom-color: rgba(68, 255, 68, 0.4);">
+            KAMU YATIRIM / İHALE VE ANLAŞMALAR
+          </div>
+          <div id="stock-contracts-list" class="news-list-area" style="border-left-color: #44FF44;"></div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── Scripts ──────────────────────────────────────────────── -->
+<script src="node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+<script src="data/bist50_companies.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/indicators.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/map.js"></script>
+<script src="js/bist.js"></script>
+<script src="js/news.js"></script>
+<script src="js/intel.js"></script>
+<script src="js/bistnews.js"></script>
+<script src="js/riskindex.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
